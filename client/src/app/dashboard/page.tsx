@@ -2,28 +2,117 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useEffect } from "react";
 import Sidebar from '@/components/Sidebar';
+import { BrowserProvider, Contract } from "ethers";
+import CONTRACT_ABI from "@/contracts/Loktantra.json";
 
-const MOCK_WALLET_ADDRESS = "0xAbC1234567890DefABC1234567890dEfABC1234";
 const ETHERSCAN_BASE = process.env.NEXT_PUBLIC_ETHERSCAN_BASE;
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as string;
 
 export default function Dashboard() {
-
+  const [walletAddress, setWalletAddress] = useState<string>("");
   const [hasVoted, setHasVoted] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [candidates, setCandidates] = useState<any[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
+
+  useEffect(() => {
+    const loadWallet = async () => {
+      if (!window.ethereum) return;
+
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      setWalletAddress(address);
+    };
+
+    loadWallet();
+    loadCandidates();
+  }, []);
+
+  const loadCandidates = async () => {
+    try {
+      if (!window.ethereum) return;
+
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      const contract = new Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI.abi,
+        signer
+      );
+
+      const count = await contract.candidatesCount();
+      console.log("Candidates count:", Number(count));
+
+      const loaded = [];
+
+      for (let i = 1; i <= Number(count); i++) {
+        const data = await contract.getCandidate(i);
+
+        loaded.push({
+          id: Number(data[0]),
+          name: data[1],
+          votes: Number(data[2])
+        });
+      }
+
+      setCandidates(loaded);
+
+    } catch (err) {
+      console.error("Failed to load candidates:", err);
+    }
+  };
+
+
   const handleVote = (candidate: any) => {
     setSelectedCandidate(candidate);
     setShowConfirmPopup(true);
   };
   
 
-  const confirmVote = () => {
-    setHasVoted(true);
-    setShowConfirmPopup(false);
-    setSelectedCandidate(null);
+  const confirmVote = async () => {
+    if (!selectedCandidate || loading) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (!window.ethereum) {
+        throw new Error("MetaMask not found");
+      }
+
+      const provider = new BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      const contract = new Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI.abi,
+        signer
+      );
+
+      const tx = await contract.vote(selectedCandidate.id);
+      setTxHash(tx.hash);
+
+      await tx.wait();
+
+      setHasVoted(true);
+      setShowConfirmPopup(false);
+      setSelectedCandidate(null);
+    } catch (err: any) {
+      console.error("Vote failed:", err);
+      setError(err?.reason || err?.shortMessage || err?.message || "Transaction failed");
+    } finally {
+      setLoading(false);
+    }
   };
+
 
   const cancelVote = () => {
     setShowConfirmPopup(false);
@@ -51,10 +140,10 @@ export default function Dashboard() {
               <div className="text-right">
                 <p className="text-xs text-gray-500">Connected Wallet</p>
                 <p className="text-sm font-mono text-gray-800">
-                  {MOCK_WALLET_ADDRESS.slice(0, 6)}...{MOCK_WALLET_ADDRESS.slice(-4)}
+                 {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`: "Not Connected"}
                 </p>
                 <a
-                  href={`${ETHERSCAN_BASE}/address/${MOCK_WALLET_ADDRESS}`}
+                  href={`${ETHERSCAN_BASE}/address/${walletAddress}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-blue-600 hover:underline"
@@ -138,17 +227,8 @@ export default function Dashboard() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[
-                  { id: 1, name: 'Rahul Sharma', party: 'Progressive Party', votes: 1234, image: 'rahulji.png' },
-                  { id: 2, name: 'Priya Patel', party: 'Green Future', votes: 987, image: 'rahulji.png' },
-                  { id: 3, name: 'Amit Kumar', party: 'Democratic Alliance', votes: 756, image: 'modiji.png' },
-                  { id: 4, name: 'Sneha Reddy', party: 'People First', votes: 543, image: 'rahulji.png' },
-                  { id: 5, name: 'Vikram Singh', party: 'Reform Party', votes: 432, image: 'modiji.png' },
-                  { id: 6, name: 'Anjali Gupta', party: 'National Unity', votes: 321, image: 'rahulji.png' }
-                ]
-                  .filter(candidate => 
-                    candidate.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    candidate.party.toLowerCase().includes(searchTerm.toLowerCase())
+                {candidates
+                  .filter(candidate =>  candidate.name.toLowerCase().includes(searchTerm.toLowerCase())
                   )
                   .map((candidate) => (
                   <div key={candidate.id} className="bg-blue-50 border rounded-lg p-6 hover:shadow-md transition-shadow">
@@ -259,7 +339,20 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-600">Transaction Hash:</span>
-                    <span className="text-xs font-medium text-gray-800">0x7f8e...2d1c</span>
+                    {txHash && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Transaction:</span>
+                      <a
+                        href={`${ETHERSCAN_BASE}/tx/${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        View on Etherscan
+                      </a>
+                    </div>
+                  )}
+
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-600">Block Number:</span>
@@ -284,12 +377,21 @@ export default function Dashboard() {
                 >
                   Cancel
                 </button>
+                {error && (
+                  <p className="text-xs text-red-600 text-center mb-2">
+                    ❌ {error}
+                  </p>
+                )}
+
                 <button
                   onClick={confirmVote}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm"
+                  disabled={loading}
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium text-sm text-white
+                    ${loading ? "bg-yellow-500" : "bg-blue-600 hover:bg-blue-700"}`}
                 >
-                  Confirm Vote
+                  {loading ? "Transaction Pending..." : "Confirm Vote"}
                 </button>
+
               </div>
             </div>
           </div>
