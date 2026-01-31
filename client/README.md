@@ -5,11 +5,13 @@ Frontend application for the Loktantra blockchain voting system.
 ## Getting Started
 
 1. Install dependencies:
+
    ```bash
    npm install
    ```
 
 2. Run the development server:
+
    ```bash
    npm run dev
    ```
@@ -31,3 +33,9 @@ Frontend application for the Loktantra blockchain voting system.
 - React 19
 - TypeScript
 - Tailwind CSS
+
+## Not Included (per requirements)
+
+- No voting logic
+- No backend or gas sponsorship logic
+- No changes to MetaMask or wallet connect logic

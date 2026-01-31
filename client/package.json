@@ -9,8 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@thirdweb-dev/react": "^4.9.4",
+    "@thirdweb-dev/sdk": "^4.0.99",
     "chart.js": "^4.5.1",
-    "ethers": "^6.16.0",
+    "ethers": "^5.8.0",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-chartjs-2": "^5.3.1",
@@ -25,5 +27,9 @@
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@magic-ext/oauth": "4.0.0",
+    "magic-sdk": "4.0.0"
   }
 }
